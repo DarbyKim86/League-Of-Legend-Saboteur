@@ -3,7 +3,7 @@
 - 방 생성/입장 → 방장이 시작 → 실시간 턴 진행.
 - 히든롤: 매 갱신마다 각 소켓에 '그 사람이 볼 수 있는 뷰'만 전송.
 - 화면(HTML/JS)은 이 파일에 내장(A안).
-실행: python game_server.py  (로컬)  /  배포: gunicorn -k eventlet -w 1 game_server:app
+실행: python game_server.py  (로컬)  /  배포: gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 game_server:app
 """
 import os
 import random
@@ -15,7 +15,7 @@ from game import Game, ROLE_RATIO
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret")
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 # 방 저장 (메모리)
 ROOMS = {}   # code -> {'host':sid, 'players':[{sid,id,name}], 'game':Game|None}
