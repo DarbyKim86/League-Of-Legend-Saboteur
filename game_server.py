@@ -270,6 +270,28 @@ PAGE = r"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:10px;justify-content:center}
   .legend span{display:inline-flex;align-items:center;gap:4px}
   .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  /* 시작 공개 연출 */
+  .reveal-ov{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;
+    background:radial-gradient(circle at 50% 38%, rgba(3,10,20,.72), rgba(2,6,14,.94))}
+  .reveal-card{max-width:390px;width:100%;text-align:center;border:1px solid var(--line);border-radius:16px;
+    padding:32px 26px;background:linear-gradient(180deg,rgba(16,43,69,.94),rgba(7,17,31,.97));animation:revcard .5s ease-out both}
+  .reveal-ov.m .reveal-card{box-shadow:0 0 60px rgba(60,137,201,.35);border-color:var(--blue)}
+  .reveal-ov.s .reveal-card{box-shadow:0 0 60px rgba(198,68,62,.35);border-color:var(--red)}
+  .reveal-emblem{font-size:48px;animation:revpop .6s .1s both}
+  .reveal-kicker{letter-spacing:.26em;font-size:12px;color:var(--muted);margin-top:8px;animation:revup .5s .28s both}
+  .reveal-role{font-family:Cinzel,serif;font-weight:700;font-size:46px;letter-spacing:.04em;margin:2px 0 12px;animation:revup .5s .38s both}
+  .reveal-ov.m .reveal-role{color:var(--blue);text-shadow:0 0 32px rgba(60,137,201,.65)}
+  .reveal-ov.s .reveal-role{color:var(--red);text-shadow:0 0 32px rgba(198,68,62,.65)}
+  .reveal-goal{color:var(--text);font-size:14px;line-height:1.65;animation:revup .5s .48s both}
+  .reveal-champ{margin:18px 0 24px;padding:13px;border-radius:11px;background:rgba(200,170,110,.09);
+    border:1px solid rgba(200,170,110,.28);animation:revup .5s .58s both}
+  .reveal-champ b{display:block;font-family:Cinzel,serif;color:var(--gold2);font-size:19px;margin-bottom:4px}
+  .reveal-champ span{font-size:12.5px;color:var(--muted)}
+  .reveal-card button{width:100%;animation:revup .5s .68s both}
+  @keyframes revcard{0%{opacity:0;transform:scale(.94)}100%{opacity:1;transform:none}}
+  @keyframes revpop{0%{opacity:0;transform:scale(.3) rotate(-12deg)}70%{transform:scale(1.15)}100%{opacity:1;transform:none}}
+  @keyframes revup{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:none}}
 </style></head><body>
 <h1>협곡의 배신자<span class="sub">RIFT · TRAITORS OF THE RIFT</span></h1>
 
@@ -313,9 +335,11 @@ PAGE = r"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel"><div class="hdr">전투 기록</div><div class="log" id="log"></div></div>
 </div>
 
+<div id="reveal" class="reveal-ov"></div>
+
 <script>
 const s = io();
-let MYID=null, CODE=null, ST=null, sel=null, rot=0, mode=null, prevKeys=new Set(), prevNexus={};
+let MYID=null, CODE=null, ST=null, sel=null, rot=0, mode=null, revealed=false, prevKeys=new Set(), prevNexus={};
 const $=q=>document.querySelector(q);
 const esc=t=>(t==null?'':(''+t)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -385,6 +409,7 @@ function renderLobby(d){
 function renderGame(d){
   show('game');
   const me=d.me;
+  if(!revealed && me && d.phase==='진행'){ revealed=true; showReveal(me); }
   if(d.phase==='종료'){ renderEnd(d); return; }
   const crest = me ? `<span class="crest ${me.role==='스파이'?'s':'m'}"><span class="dot"></span>${me.role}</span>` : '';
   const yourTurn = me&&me.myTurn;
@@ -396,7 +421,7 @@ function renderGame(d){
       ctrls+=`<button class="sec" onclick="startBribe('force')" ${me.forceUsed?'disabled':''}>강제 매수</button>`;
     }
   }
-  const champLine = me?`<div class="muted" style="font-size:12px;margin-top:7px">챔피언 <b style="color:var(--gold2)">${esc(me.champ)}</b> — ${esc(me.champDesc)}</div>`:'';
+  const champLine = me?`<div class="muted" style="font-size:12px;margin-top:7px;cursor:pointer" onclick="if(ST&&ST.me)showReveal(ST.me)" title="다시 보기">챔피언 <b style="color:var(--gold2)">${esc(me.champ)}</b> — ${esc(me.champDesc)}<br>목표 · ${esc(me.goal)} <span style="color:var(--teal)">ⓘ</span></div>`:'';
   let bribeBox='';
   if(me && me.bribeOffer){
     bribeBox=`<div class="panel" style="margin:11px 0 0;border-color:var(--red)">
@@ -503,6 +528,20 @@ function useAbility(){
 }
 function startBribe(m){ const me=ST&&ST.me; if(!me||!me.myTurn||!me.isSpy) return; sel=null; mode='bribe_'+m; renderGame(ST); }
 function respondBribe(a){ s.emit('bribe_response',{accept:a}); }
+
+function showReveal(me){
+  const spy = me.role==='스파이';
+  const ov=$('#reveal'); ov.className='reveal-ov '+(spy?'s':'m');
+  ov.innerHTML=`<div class="reveal-card">
+    <div class="reveal-emblem">${spy?'🗡️':'🛡️'}</div>
+    <div class="reveal-kicker">${spy?'매수된 배신자':'협곡의 수호자'}</div>
+    <div class="reveal-role">${esc(me.role)}</div>
+    <div class="reveal-goal">${esc(me.goal)}</div>
+    <div class="reveal-champ"><b>${esc(me.champ)}</b><span>${esc(me.champDesc)}</span></div>
+    <button onclick="closeReveal()">협곡으로 입장 ⚔️</button></div>`;
+  ov.style.display='flex';
+}
+function closeReveal(){ $('#reveal').style.display='none'; }
 
 function updateHint(){
   const me=ST&&ST.me; const h=$('#hint'); if(!me){h.textContent='';return;}

@@ -407,6 +407,9 @@ class Game:
         my_turn = bool(self.players and self.players[self.turn]["id"] == pid and self.phase == "진행")
         champ = me["champ"] if me else None
         info = CHAMPS.get(champ, {})
+        goal = ("본진에서 진짜 넥서스까지 길을 이으면 승리합니다."
+                if (me and me["role"] == "소환사")
+                else "덱이 소진될 때까지 진짜 넥서스 연결을 막으면 승리합니다.")
         return {
             "phase": self.phase, "winner": self.winner, "turn": self.turn,
             "turnName": self.players[self.turn]["name"] if self.players else "",
@@ -420,7 +423,7 @@ class Game:
                 "hand": me["hand"], "wardSeen": me["ward_seen"], "myTurn": my_turn,
                 "champ": champ, "champKind": info.get("kind"), "champDesc": info.get("desc", ""),
                 "champTarget": info.get("target"), "abilityReady": (info.get("kind") == "active" and not me["champ_used"]),
-                "isSpy": me["role"] == "스파이", "forceUsed": self.force_used,
+                "isSpy": me["role"] == "스파이", "forceUsed": self.force_used, "goal": goal,
                 "bribeOffer": (self.pending_bribe["from"] if self.pending_bribe and self.pending_bribe["to"] == pid else None),
             },
             "meta": {"rows": ROWS, "cols": NEXUS_COL + 1, "start": list(START),
