@@ -134,88 +134,157 @@ def index():
 PAGE = r"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>협곡의 배신자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-  :root{--ink:#0A1220;--surface:#111C2E;--surface2:#16233A;--line:#23344F;--gold:#C8AA6E;
-    --gold2:#E4D5A8;--blue:#4B9CD3;--red:#C0475A;--green:#3FB27F;--text:#E6EAF0;--muted:#8FA1BB;}
-  *{box-sizing:border-box} body{margin:0;background:var(--ink);color:var(--text);
-    font-family:Inter,system-ui,sans-serif;padding:14px;max-width:760px;margin:0 auto}
-  h1{font-size:20px;margin:6px 0 12px;color:var(--gold2)}
-  button{background:var(--gold);color:#1a1204;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer}
+  :root{
+    --rift:#050e1c; --rift2:#08182b; --panel:#0c2136; --panel2:#102b45; --line:#1c3d59;
+    --gold:#c8aa6e; --gold2:#f0e6d2; --bronze:#785a28; --teal:#0ac8b9; --teald:#0397ab;
+    --blue:#3c89c9; --red:#c6443e; --text:#cfe3f0; --muted:#6f92ab; --cell:52px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--text);font-family:Inter,system-ui,sans-serif;padding:16px 14px 40px;
+    max-width:820px;margin:0 auto;min-height:100vh;
+    background:
+      radial-gradient(1100px 500px at 50% -8%, rgba(10,200,185,.10), transparent 60%),
+      radial-gradient(800px 400px at 50% 110%, rgba(200,170,110,.08), transparent 60%),
+      var(--rift);}
+  h1{font-family:Cinzel,serif;font-weight:700;font-size:22px;letter-spacing:.04em;margin:2px 0 16px;
+    color:var(--gold2);text-align:center;text-shadow:0 0 18px rgba(200,170,110,.35)}
+  h1 .sub{display:block;font-family:Inter;font-weight:500;font-size:12px;letter-spacing:.28em;
+    color:var(--teal);margin-top:5px}
+  button{font-family:Inter;background:linear-gradient(180deg,#d8bd82,#b7975a);color:#20160a;border:0;
+    border-radius:7px;padding:10px 16px;font-weight:600;cursor:pointer;transition:filter .12s}
+  button:hover{filter:brightness(1.08)} button:disabled{filter:grayscale(.6) brightness(.7);cursor:default}
   button.sec{background:transparent;border:1px solid var(--line);color:var(--text)}
-  button:disabled{opacity:.4;cursor:default}
-  input{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 10px}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
-  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  button.sec:hover{border-color:var(--gold);background:var(--panel2)}
+  input{background:#071726;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:10px 11px;font-size:15px}
+  input:focus{outline:none;border-color:var(--teald)}
+  .panel{background:linear-gradient(180deg,rgba(16,43,69,.75),rgba(10,26,44,.85));
+    border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:12px;
+    box-shadow:inset 0 1px 0 rgba(120,90,40,.18)}
+  .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
   .muted{color:var(--muted)} .err{color:var(--red);min-height:18px;font-size:13px}
-  .role{font-weight:700} .role.s{color:var(--red)} .role.m{color:var(--blue)}
-  #board{display:grid;gap:3px;justify-content:center;margin:10px 0;overflow:auto}
-  .cell{width:46px;height:46px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;
-    position:relative;cursor:pointer}
-  .cell.empty:hover{outline:2px solid var(--gold)}
-  .cell.start{background:#20406a}.cell.nexus{background:#3a2a4a}
-  .cell.nexus.real{background:#2a5a3a}.cell.nexus.fake{background:#5a2a2a}
-  .pip{position:absolute;background:var(--gold2);border-radius:2px}
-  .n{top:0;left:50%;width:8px;height:22px;transform:translateX(-50%)}
-  .s{bottom:0;left:50%;width:8px;height:22px;transform:translateX(-50%)}
-  .e{right:0;top:50%;width:22px;height:8px;transform:translateY(-50%)}
-  .w{left:0;top:50%;width:22px;height:8px;transform:translateY(-50%)}
-  .noconn{background:var(--red)!important;opacity:.6}
-  .hand{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-  .hc{width:52px;height:52px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);
-    position:relative;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center}
-  .hc.sel{outline:2px solid var(--gold)}
-  .hc .act{color:var(--gold2);font-weight:700}
-  .pl{display:flex;justify-content:space-between;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:5px}
-  .pl.turn{border-color:var(--gold);background:var(--surface2)}
-  .badge{font-size:11px;padding:1px 6px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
-  .badge.stun{color:var(--red);border-color:var(--red)}
-  .log{font-size:12px;color:var(--muted);line-height:1.6;max-height:120px;overflow:auto}
-  .win{text-align:center;font-family:serif;font-size:22px;color:var(--gold2);padding:14px}
-</style></head><body>
-<h1>⚔️ 협곡의 배신자</h1>
+  .hdr{font-family:Cinzel,serif;font-size:14px;letter-spacing:.06em;color:var(--gold);margin-bottom:9px}
 
-<div id="home" class="card">
-  <div class="row"><input id="name" placeholder="닉네임" maxlength="12"></div>
-  <div class="row" style="margin-top:8px">
+  /* 역할 크레스트 */
+  .crest{display:inline-flex;align-items:center;gap:7px;font-weight:700}
+  .crest.m{color:var(--blue)} .crest.s{color:var(--red)}
+  .crest .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 8px currentColor;background:currentColor}
+  .turnpill{font-family:Cinzel,serif;font-size:13px;color:var(--gold2)}
+
+  /* 보드 */
+  #boardwrap{display:flex;justify-content:center;margin:10px -6px}
+  #board{display:grid;gap:4px;padding:12px;border-radius:14px;
+    background:
+      radial-gradient(120% 120% at 12% 0%, rgba(60,137,201,.10), transparent 55%),
+      radial-gradient(120% 120% at 88% 100%, rgba(198,68,62,.10), transparent 55%),
+      linear-gradient(180deg,#0a1c30,#07131f);
+    border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.4), inset 0 0 0 1px rgba(120,90,40,.10);
+    overflow:auto;max-width:100%}
+  .cell{width:var(--cell);height:var(--cell);border-radius:8px;background:#0a1a2b;
+    border:1px solid #12283d;position:relative;color:var(--bronze);transition:transform .1s}
+  .cell.empty{cursor:pointer;background:repeating-linear-gradient(45deg,#0a1a2b,#0a1a2b 6px,#0b1e30 6px,#0b1e30 12px)}
+  .cell.empty:hover{outline:2px solid var(--gold);outline-offset:-1px}
+  .cell.path{background:#0b2033;border-color:#1a3247}
+  .cell.path.lit{color:var(--gold2);border-color:var(--gold);box-shadow:0 0 12px rgba(200,170,110,.28)}
+  .cell.start{background:radial-gradient(circle at 50% 50%,rgba(60,137,201,.30),#0a1a2b);border-color:var(--blue)}
+  .cell.nexus{cursor:default}
+  .cell.gankable{cursor:crosshair} .cell.gankable:hover{outline:2px solid var(--red);outline-offset:-1px}
+  .cell.wardable{cursor:help} .cell.wardable:hover{outline:2px solid var(--blue);outline-offset:-1px}
+  .cell svg{display:block}
+  .placed{animation:pop .28s ease-out}
+  @keyframes pop{0%{transform:scale(.7);opacity:.3}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+  .revealed{animation:flash .6s ease-out}
+  @keyframes flash{0%{filter:brightness(2.4)}100%{filter:brightness(1)}}
+  .wardmark{position:absolute;top:2px;right:3px;font-size:10px;line-height:1}
+
+  /* 손패 */
+  .hand{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+  .hc{width:56px;height:56px;border-radius:9px;background:#0b2033;border:1px solid #1a3247;
+    position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;transition:transform .1s,border-color .1s}
+  .hc:hover{transform:translateY(-3px)} .hc.sel{border-color:var(--gold);box-shadow:0 0 12px rgba(200,170,110,.4)}
+  .hc .lab{font-size:10px;color:var(--muted)}
+  .hc.act .ic{font-size:20px;line-height:1}
+  .hc.stun{border-color:rgba(198,68,62,.5)} .hc.heal{border-color:rgba(10,200,185,.5)}
+  .hc.gank{border-color:rgba(200,170,110,.5)} .hc.ward{border-color:rgba(60,137,201,.5)}
+  #handbox.myturn{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold), 0 0 24px rgba(200,170,110,.18)}
+  .hint{font-size:12.5px;color:var(--teal);margin-top:9px;min-height:16px}
+
+  /* 플레이어 */
+  .pl{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;border:1px solid var(--line);
+    border-radius:9px;margin-bottom:6px;background:rgba(10,26,44,.5);cursor:default}
+  .pl.turn{border-color:var(--gold);background:var(--panel2);box-shadow:inset 3px 0 0 var(--gold)}
+  .pl.me{outline:1px solid rgba(60,137,201,.35)}
+  .pl.clickable{cursor:pointer} .pl.clickable:hover{border-color:var(--teal)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .badge.stun{color:var(--red);border-color:rgba(198,68,62,.6)}
+  .badge.gold{color:var(--gold2);border-color:var(--gold)}
+
+  .log{font-size:12px;color:var(--muted);line-height:1.65;max-height:130px;overflow:auto}
+  .log b{color:var(--text)}
+
+  /* 승리 */
+  .verdict{text-align:center;padding:22px 14px}
+  .verdict .big{font-family:Cinzel,serif;font-size:30px;letter-spacing:.03em;
+    text-shadow:0 0 26px currentColor;animation:rise .6s ease-out}
+  .verdict .big.m{color:var(--blue)} .verdict .big.s{color:var(--red)}
+  .verdict .me{margin-top:8px;font-size:14px}
+  @keyframes rise{0%{opacity:0;transform:translateY(14px) scale(.9)}100%{opacity:1;transform:none}}
+
+  .code-badge{font-family:Cinzel,serif;letter-spacing:5px;color:var(--gold2);font-size:22px;
+    background:#071726;border:1px solid var(--gold);border-radius:8px;padding:4px 14px}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:10px;justify-content:center}
+  .legend span{display:inline-flex;align-items:center;gap:4px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+</style></head><body>
+<h1>협곡의 배신자<span class="sub">RIFT · TRAITORS OF THE RIFT</span></h1>
+
+<div id="home" class="panel">
+  <div class="hdr">소환사 등록</div>
+  <div class="row"><input id="name" placeholder="닉네임" maxlength="12" style="flex:1"></div>
+  <div class="row" style="margin-top:10px">
     <button onclick="createRoom()">방 만들기</button>
-    <input id="code" placeholder="방코드" maxlength="4" style="width:90px;text-transform:uppercase">
+    <input id="code" placeholder="방 코드" maxlength="4" style="width:110px;text-transform:uppercase;letter-spacing:3px">
     <button class="sec" onclick="joinRoom()">입장</button>
   </div>
   <div class="err" id="homeErr"></div>
 </div>
 
-<div id="lobby" class="card" style="display:none">
-  <div class="row" style="justify-content:space-between">
-    <div>방코드 <b id="lcode" style="color:var(--gold2);letter-spacing:2px"></b></div>
+<div id="lobby" class="panel" style="display:none">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div>방 코드 <span class="code-badge" id="lcode"></span></div>
     <button id="startBtn" onclick="startGame()" style="display:none">게임 시작</button>
   </div>
-  <div id="lplayers" style="margin-top:10px"></div>
-  <div class="muted" style="font-size:12px;margin-top:8px">4~7명이 모이면 방장이 시작할 수 있어요.</div>
+  <div id="lplayers" style="margin-top:14px"></div>
+  <div class="muted" style="font-size:12px;margin-top:10px">소환사 4~7명이 모이면 방장이 시작할 수 있습니다.</div>
 </div>
 
 <div id="game" style="display:none">
-  <div class="card" id="topbar"></div>
-  <div id="board"></div>
+  <div class="panel" id="topbar"></div>
+  <div id="boardwrap"><div id="board"></div></div>
+  <div class="legend" id="legend"></div>
   <div class="err" id="gErr"></div>
-  <div class="card" id="handbox">
+  <div class="panel" id="handbox">
     <div class="row" style="justify-content:space-between">
-      <b>내 손패</b>
+      <div class="hdr" style="margin:0">내 손패</div>
       <div class="row">
         <button class="sec" id="rotBtn" onclick="rotate()">회전 ↻</button>
         <button class="sec" onclick="doPass()">패스</button>
       </div>
     </div>
     <div class="hand" id="hand"></div>
-    <div class="muted" id="hint" style="font-size:12px;margin-top:6px"></div>
+    <div class="hint" id="hint"></div>
   </div>
-  <div class="card"><b>플레이어</b><div id="players" style="margin-top:8px"></div></div>
-  <div class="card"><b>기록</b><div class="log" id="log"></div></div>
+  <div class="panel"><div class="hdr">소환사</div><div id="players"></div></div>
+  <div class="panel"><div class="hdr">전투 기록</div><div class="log" id="log"></div></div>
 </div>
 
 <script>
 const s = io();
-let MYID=null, CODE=null, ST=null, sel=null, rot=0, pendingAction=null;
+let MYID=null, CODE=null, ST=null, sel=null, rot=0, prevKeys=new Set(), prevNexus={};
 const $=q=>document.querySelector(q);
 const esc=t=>(t==null?'':(''+t)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -223,140 +292,191 @@ function createRoom(){ s.emit('create_room',{name:$('#name').value}); }
 function joinRoom(){ s.emit('join_room',{name:$('#name').value, code:$('#code').value}); }
 function startGame(){ s.emit('start_game',{}); }
 
-s.on('err', d=>{ $('#homeErr').textContent=d.msg; $('#gErr').textContent=d.msg; setTimeout(()=>{$('#gErr').textContent='';},2500); });
+s.on('err', d=>{ $('#homeErr').textContent=d.msg; const g=$('#gErr'); if(g){g.textContent=d.msg; setTimeout(()=>{g.textContent='';},2600);} });
 s.on('joined', d=>{ MYID=d.id; CODE=d.code; });
-s.on('lobby', d=>{ renderLobby(d); });
+s.on('lobby', d=>renderLobby(d));
 s.on('state', d=>{ ST=d; renderGame(d); });
 
 function show(id){ ['home','lobby','game'].forEach(x=>$('#'+x).style.display = x===id?'':'none'); }
 
-function renderLobby(d){
-  show('lobby'); $('#lcode').textContent=d.code;
-  $('#lplayers').innerHTML = d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===d.host?' 👑':''}</span></div>`).join('');
-  const isHost = d.host===MYID, ok = d.players.length>=4 && d.players.length<=7;
-  const b=$('#startBtn'); b.style.display = isHost?'':'none'; b.disabled=!ok;
+// ---- SVG 타일 ----
+function tileSVG(edges,conn){
+  const A={0:[22,0,12,30],1:[26,22,30,12],2:[22,26,12,30],3:[0,22,30,12]};
+  let arms='';
+  for(let i=0;i<4;i++) if(edges[i]){const m=A[i];arms+=`<rect x="${m[0]}" y="${m[1]}" width="${m[2]}" height="${m[3]}" rx="3" fill="currentColor"/>`;}
+  const hub = conn
+    ? '<circle cx="28" cy="28" r="10" fill="currentColor"/>'
+    : '<rect x="18" y="18" width="20" height="20" rx="4" fill="#2a0f0f"/><path d="M23 23 L33 33 M33 23 L23 33" stroke="#c6443e" stroke-width="2.6" stroke-linecap="round"/>';
+  return `<svg viewBox="0 0 56 56" width="100%" height="100%">${arms}${hub}</svg>`;
+}
+function startSVG(){
+  return `<svg viewBox="0 0 56 56" width="100%" height="100%">
+    <circle cx="28" cy="28" r="15" fill="none" stroke="#3c89c9" stroke-width="2.4"/>
+    <circle cx="28" cy="28" r="8" fill="#3c89c9" opacity="0.55"/>
+    <circle cx="28" cy="28" r="3" fill="#cfe3f0"/></svg>`;
+}
+function crystalSVG(state){
+  const c = state==='real'?'#f0e6d2':state==='fake'?'#c6443e':'#0ac8b9';
+  const fillOp = state==='hidden'?0.22:0.6;
+  const sym = state==='real'?'★':state==='fake'?'✕':'?';
+  return `<svg viewBox="0 0 56 56" width="100%" height="100%">
+    <polygon points="28,5 47,28 28,51 9,28" fill="none" stroke="${c}" stroke-width="2.4"/>
+    <polygon points="28,14 39,28 28,42 17,28" fill="${c}" opacity="${fillOp}"/>
+    <text x="28" y="34" text-anchor="middle" font-size="16" font-family="Cinzel,serif" fill="${c}">${sym}</text></svg>`;
 }
 
-// ---- 게임 렌더 ----
+function clientReachable(d){
+  const DIRS=[[-1,0],[0,1],[1,0],[0,-1]], OPP=[2,3,0,1];
+  const sc=d.meta.start; const seen=new Set([sc.join(',')]); const stack=[sc];
+  while(stack.length){
+    const [r,c]=stack.pop(); const t=d.board[r+','+c]; if(!t) continue;
+    if(t.kind!=='start' && t.conn!==1) continue;
+    if(t.kind==='nexus') continue;
+    const e=t.edges||[0,0,0,0];
+    for(let i=0;i<4;i++){ if(!e[i]) continue;
+      const nr=r+DIRS[i][0], nc=c+DIRS[i][1], nb=d.board[nr+','+nc];
+      if(!nb||nb.kind==='nexus') continue;
+      if((nb.edges||[0,0,0,0])[OPP[i]]!==1) continue;
+      const k=nr+','+nc; if(!seen.has(k)){seen.add(k);stack.push([nr,nc]);}
+    }
+  }
+  return seen;
+}
+
+function renderLobby(d){
+  show('lobby'); $('#lcode').textContent=d.code;
+  $('#lplayers').innerHTML=d.players.map(p=>`<div class="pl"><span>${esc(p.name)}${p.id===d.host?' <span class="badge gold">방장</span>':''}${p.id===MYID?' <span class="muted">(나)</span>':''}</span></div>`).join('');
+  const isHost=d.host===MYID, ok=d.players.length>=4&&d.players.length<=7;
+  const b=$('#startBtn'); b.style.display=isHost?'':'none'; b.disabled=!ok;
+  b.textContent = ok?'게임 시작':`4~7명 필요 (${d.players.length})`;
+}
+
 function renderGame(d){
   show('game');
   const me=d.me;
-  const roleTxt = me ? `<span class="role ${me.role==='스파이'?'s':'m'}">${me.role}</span>` : '';
-  const turnTxt = d.phase==='진행' ? `지금: <b>${esc(d.turnName)}</b> 차례${me&&me.myTurn?' (당신!)':''}` : '';
+  if(d.phase==='종료'){ renderEnd(d); return; }
+  const crest = me ? `<span class="crest ${me.role==='스파이'?'s':'m'}"><span class="dot"></span>${me.role}</span>` : '';
+  const yourTurn = me&&me.myTurn;
   $('#topbar').innerHTML = `<div class="row" style="justify-content:space-between">
-    <div>내 역할: ${roleTxt}</div><div>${turnTxt}</div></div>`;
+    <div>내 역할 ${crest}</div>
+    <div class="turnpill">${yourTurn?'⚔️ 당신의 차례':'⏳ '+esc(d.turnName)+' 차례'}</div></div>`;
 
   renderBoard(d);
-  // 손패
+  $('#legend').innerHTML = `
+    <span><span class="sw" style="background:var(--gold2)"></span>연결된 길</span>
+    <span><span class="sw" style="background:var(--bronze)"></span>끊긴 길</span>
+    <span><span class="sw" style="background:#2a0f0f;border:1px solid var(--red)"></span>막힌 길</span>
+    <span><span class="sw" style="background:var(--teal)"></span>넥서스(?)</span>`;
+
+  const hb=$('#handbox'); hb.classList.toggle('myturn', !!yourTurn);
   if(me){
+    const ACT={stun:['⚡','스턴'],heal:['✚','정화'],gank:['💥','갱킹'],ward:['👁','와드']};
     $('#hand').innerHTML = me.hand.map((c,i)=>{
-      if(c.type==='path'){
-        return `<div class="hc ${sel===i?'sel':''}" onclick="pickHand(${i})">${miniTile(c.edges)}</div>`;
-      }
-      const kor={stun:'스턴',heal:'정화',gank:'갱킹',ward:'와드'}[c.action];
-      return `<div class="hc ${sel===i?'sel':''}" onclick="pickHand(${i})"><span class="act">${kor}</span></div>`;
-    }).join('');
+      if(c.type==='path')
+        return `<div class="hc ${sel===i?'sel':''}" onclick="pickHand(${i})">${tileSVG(c.edges,c.conn)}</div>`;
+      const a=ACT[c.action];
+      return `<div class="hc act ${c.action} ${sel===i?'sel':''}" onclick="pickHand(${i})"><span class="ic">${a[0]}</span><span class="lab">${a[1]}</span></div>`;
+    }).join('') || '<span class="muted">손패 없음</span>';
     updateHint();
   }
-  // 플레이어
-  $('#players').innerHTML = d.players.map((p,i)=>`<div class="pl ${i===d.turn?'turn':''}">
-    <span>${esc(p.name)}${p.id===MYID?' (나)':''} ${p.connected?'':'<span class="badge">이탈</span>'}</span>
-    <span>${p.blocked?'<span class="badge stun">스턴</span> ':''}<span class="badge">손 ${p.hand}</span></span></div>`).join('');
+
+  $('#players').innerHTML = d.players.map((p,i)=>{
+    const isTgt = canTargetPlayer() && p.id!==MYID;
+    return `<div class="pl ${i===d.turn?'turn':''} ${p.id===MYID?'me':''} ${isTgt?'clickable':''}" data-i="${i}">
+      <span>${esc(p.name)}${p.id===MYID?' <span class="muted">(나)</span>':''} ${p.connected?'':'<span class="badge">이탈</span>'}</span>
+      <span>${p.blocked?'<span class="badge stun">스턴</span> ':''}<span class="badge">손 ${p.hand}</span></span></div>`;
+  }).join('');
   $('#log').innerHTML = d.log.map(l=>`<div>· ${esc(l)}</div>`).reverse().join('');
-
-  if(d.phase==='종료'){
-    $('#gErr').innerHTML='';
-    $('#topbar').innerHTML = `<div class="win">${d.winner} 승리! 🏆</div>
-      <div class="muted" style="text-align:center">${me?('당신은 '+me.role+'):'):''} ${me&&me.role===d.winner?'승리 🎉':'패배'}</div>`;
-  }
-}
-
-function miniTile(e){
-  let h='';
-  if(e[0])h+='<span class="pip n"></span>'; if(e[1])h+='<span class="pip e"></span>';
-  if(e[2])h+='<span class="pip s"></span>'; if(e[3])h+='<span class="pip w"></span>';
-  return h;
 }
 
 function renderBoard(d){
   const {rows,cols}=d.meta;
-  const bd=$('#board'); bd.style.gridTemplateColumns=`repeat(${cols},46px)`;
+  const reach=clientReachable(d);
+  const bd=$('#board'); bd.style.gridTemplateColumns=`repeat(${cols}, var(--cell))`;
+  const nowKeys=new Set(Object.keys(d.board).filter(k=>{const t=d.board[k];return t.kind==='path';}));
   let html='';
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-    const t=d.board[r+','+c];
-    let cls='cell', inner='';
+    const key=r+','+c, t=d.board[key]; let cls='cell', inner='', extra='';
+    const canGank=selIsAction('gank'), canWard=selIsAction('ward');
     if(!t){ cls+=' empty'; }
-    else if(t.kind==='start'){ cls+=' start'; inner=miniTile(t.edges); }
+    else if(t.kind==='start'){ cls+=' start'; inner=startSVG(); }
     else if(t.kind==='nexus'){
-      cls+=' nexus'; 
-      if(t.revealed) cls+= t.real?' real':' fake';
-      inner = t.revealed ? (t.real?'★':'✕') : '?';
-      // 와드로 본 정보(본인만)
-      const w = d.me && d.me.wardSeen && d.me.wardSeen[nexusIndex(d,r,c)];
-      if(!t.revealed && d.me && (nexusIndex(d,r,c) in (d.me.wardSeen||{}))) inner = w?'(★)':'(✕)';
+      cls+=' nexus';
+      let state = t.revealed ? (t.real?'real':'fake') : 'hidden';
+      inner=crystalSVG(state);
+      if(canWard && !t.revealed) cls+=' wardable';
+      const ni=nexusIndex(d,r,c);
+      if(!t.revealed && d.me && d.me.wardSeen && (ni in d.me.wardSeen)){
+        const real=d.me.wardSeen[ni];
+        extra=`<span class="wardmark">${real?'⭐':'🚫'}</span>`;
+      }
+      if(t.revealed && !prevNexus[key]) cls+=' revealed';
+    } else {
+      cls+=' path'+(reach.has(key)?' lit':'');
+      inner=tileSVG(t.edges,t.conn);
+      if(!prevKeys.has(key)) cls+=' placed';
+      if(canGank) cls+=' gankable';
     }
-    else { inner=miniTile(t.edges); if(!t.conn) cls+=''; }
-    const noconn = (t&&t.kind==='path'&&!t.conn)?'<span class="pip" style="width:10px;height:10px;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--red);border-radius:50%"></span>':'';
-    html+=`<div class="${cls}" onclick="clickCell(${r},${c})">${inner}${noconn}</div>`;
+    html+=`<div class="${cls}" onclick="clickCell(${r},${c})">${inner}${extra}</div>`;
   }
   bd.innerHTML=html;
+  prevKeys=nowKeys;
+  prevNexus={}; for(const k in d.board){ if(d.board[k].kind==='nexus'&&d.board[k].revealed) prevNexus[k]=1; }
 }
-function nexusIndex(d,r,c){ return d.meta.nexus.findIndex(n=>n[0]===r&&n[1]===c); }
 
-function pickHand(i){
-  if(!ST.me||!ST.me.myTurn) return;
-  sel=(sel===i?null:i); rot=0; pendingAction=null;
-  renderGame(ST);
+function renderEnd(d){
+  const me=d.me;
+  const cls=d.winner==='스파이'?'s':'m';
+  const mine = me? (me.role===d.winner?'승리했습니다 🎉':'패배했습니다') : '';
+  $('#topbar').innerHTML = `<div class="verdict">
+    <div class="big ${cls}">${d.winner} 승리</div>
+    <div class="me muted">${me?('당신은 '+me.role+' — '+mine):''}</div></div>`;
+  renderBoard(d);
+  $('#legend').innerHTML='';
+  $('#handbox').classList.remove('myturn');
+  $('#hand').innerHTML=''; $('#hint').textContent='새 게임을 하려면 페이지를 새로고침하세요.';
+  $('#players').innerHTML = d.players.map((p,i)=>`<div class="pl"><span>${esc(p.name)}${p.id===MYID?' (나)':''}</span></div>`).join('');
+  $('#log').innerHTML = d.log.map(l=>`<div>· ${esc(l)}</div>`).reverse().join('');
 }
-function rotate(){ rot^=1; renderGame(ST); updateHint(); }
+
+function nexusIndex(d,r,c){ return d.meta.nexus.findIndex(n=>n[0]===r&&n[1]===c); }
+function selCard(){ return (ST&&ST.me&&sel!==null)?ST.me.hand[sel]:null; }
+function selIsAction(a){ const c=selCard(); return c&&c.type==='action'&&c.action===a; }
+function canTargetPlayer(){ const c=selCard(); return c&&c.type==='action'&&(c.action==='stun'||c.action==='heal'); }
+
+function pickHand(i){ if(!ST||!ST.me||!ST.me.myTurn) return; sel=(sel===i?null:i); rot=0; renderGame(ST); }
+function rotate(){ if(sel===null) return; rot^=1; updateHint(); }
 
 function updateHint(){
-  const me=ST&&ST.me; if(!me){return;}
-  if(!me.myTurn){ $('#hint').textContent='다른 사람 차례입니다.'; return; }
-  if(sel===null){ $('#hint').textContent='손패에서 카드를 고르세요.'; return; }
-  const c=me.hand[sel];
-  if(c.type==='path') $('#hint').textContent=me.blocked?'스턴 상태 — 길을 놓을 수 없습니다(정화 필요).':'빈 칸을 클릭해 길을 놓으세요. (회전 가능)';
-  else if(c.action==='gank') $('#hint').textContent='부술 길 카드를 클릭하세요.';
-  else if(c.action==='ward') $('#hint').textContent='정찰할 넥서스(?)를 클릭하세요.';
-  else $('#hint').textContent='대상 플레이어를 아래 목록에서 클릭하세요.';
+  const me=ST&&ST.me; const h=$('#hint'); if(!me){h.textContent='';return;}
+  if(!me.myTurn){ h.textContent='다른 소환사의 차례입니다.'; return; }
+  const c=selCard();
+  if(!c){ h.textContent='손패에서 카드를 고르세요.'; return; }
+  if(c.type==='path') h.textContent = me.blocked?'스턴 상태 — 길을 놓을 수 없습니다. 정화가 필요합니다.'
+    : `빈 칸을 눌러 길을 놓으세요. 회전 상태: ${rot?'180°':'기본'}`;
+  else if(c.action==='gank') h.textContent='부술 길(빨강 테두리)을 누르세요.';
+  else if(c.action==='ward') h.textContent='정찰할 넥서스(?)를 누르세요.';
+  else if(c.action==='stun') h.textContent='스턴할 소환사를 아래 목록에서 누르세요.';
+  else if(c.action==='heal') h.textContent='정화할 소환사를 아래 목록에서 누르세요.';
 }
 
 function clickCell(r,c){
   const me=ST&&ST.me; if(!me||!me.myTurn||sel===null) return;
-  const card=me.hand[sel];
-  const t=ST.board[r+','+c];
-  if(card.type==='path'){
-    if(t) return;
-    s.emit('act',{kind:'place',payload:{hand:sel,pos:[r,c],rot:rot}}); sel=null;
-  } else if(card.action==='gank'){
-    if(!t||t.kind!=='path') return;
-    s.emit('act',{kind:'action',payload:{hand:sel,pos:[r,c]}}); sel=null;
-  } else if(card.action==='ward'){
-    const ni=nexusIndex(ST,r,c); if(ni<0) return;
-    s.emit('act',{kind:'action',payload:{hand:sel,nexus:ni}}); sel=null;
-  }
+  const card=selCard(), t=ST.board[r+','+c];
+  if(card.type==='path'){ if(t) return; s.emit('act',{kind:'place',payload:{hand:sel,pos:[r,c],rot}}); sel=null; }
+  else if(card.action==='gank'){ if(!t||t.kind!=='path') return; s.emit('act',{kind:'action',payload:{hand:sel,pos:[r,c]}}); sel=null; }
+  else if(card.action==='ward'){ const ni=nexusIndex(ST,r,c); if(ni<0) return; s.emit('act',{kind:'action',payload:{hand:sel,nexus:ni}}); sel=null; }
 }
 
-// 플레이어 클릭 = 스턴/정화 대상
-$('#players').addEventListener('click',e=>{});
-function targetPlayer(pid){
-  const me=ST&&ST.me; if(!me||!me.myTurn||sel===null) return;
-  const card=me.hand[sel];
-  if(card.type==='action'&&(card.action==='stun'||card.action==='heal')){
-    s.emit('act',{kind:'action',payload:{hand:sel,target:pid}}); sel=null;
-  }
-}
-// 플레이어 목록에 클릭 핸들러 위임
 document.addEventListener('click',e=>{
-  const pl=e.target.closest('#players .pl'); if(!pl) return;
-  const idx=[...$('#players').children].indexOf(pl);
-  if(idx>=0&&ST&&ST.players[idx]) targetPlayer(ST.players[idx].id);
+  const pl=e.target.closest('#players .pl'); if(!pl||!ST||!ST.me||!ST.me.myTurn) return;
+  const i=+pl.dataset.i; const card=selCard();
+  if(card&&card.type==='action'&&(card.action==='stun'||card.action==='heal')&&ST.players[i]&&ST.players[i].id!==MYID){
+    s.emit('act',{kind:'action',payload:{hand:sel,target:ST.players[i].id}}); sel=null;
+  }
 });
 
-function doPass(){
-  const me=ST&&ST.me; if(!me||!me.myTurn) return;
-  s.emit('act',{kind:'pass',payload:{hand: sel!==null?sel:undefined}}); sel=null;
-}
+function doPass(){ const me=ST&&ST.me; if(!me||!me.myTurn) return; s.emit('act',{kind:'pass',payload:{hand: sel!==null?sel:undefined}}); sel=null; }
 </script>
 </body></html>
 """
