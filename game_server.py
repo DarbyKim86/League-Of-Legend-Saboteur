@@ -104,6 +104,37 @@ def on_act(data):
     push(code)
 
 
+@socketio.on("ability")
+def on_ability(data):
+    code, r, p = room_of(request.sid)
+    if not r or not r["game"]:
+        return
+    ok, msg = r["game"].use_ability(p["id"], data.get("payload", {}))
+    if not ok:
+        emit("err", {"msg": msg})
+    push(code)
+
+
+@socketio.on("bribe")
+def on_bribe(data):
+    code, r, p = room_of(request.sid)
+    if not r or not r["game"]:
+        return
+    ok, msg, notify = r["game"].bribe(p["id"], data.get("payload", {}))
+    if not ok:
+        emit("err", {"msg": msg})
+    push(code)
+
+
+@socketio.on("bribe_response")
+def on_bribe_response(data):
+    code, r, p = room_of(request.sid)
+    if not r or not r["game"]:
+        return
+    r["game"].bribe_response(p["id"], bool(data.get("accept")))
+    push(code)
+
+
 @socketio.on("disconnect")
 def on_disc():
     code, r, p = room_of(request.sid)
@@ -284,7 +315,7 @@ PAGE = r"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
 <script>
 const s = io();
-let MYID=null, CODE=null, ST=null, sel=null, rot=0, prevKeys=new Set(), prevNexus={};
+let MYID=null, CODE=null, ST=null, sel=null, rot=0, mode=null, prevKeys=new Set(), prevNexus={};
 const $=q=>document.querySelector(q);
 const esc=t=>(t==null?'':(''+t)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -357,9 +388,26 @@ function renderGame(d){
   if(d.phase==='종료'){ renderEnd(d); return; }
   const crest = me ? `<span class="crest ${me.role==='스파이'?'s':'m'}"><span class="dot"></span>${me.role}</span>` : '';
   const yourTurn = me&&me.myTurn;
+  let ctrls='';
+  if(me && yourTurn){
+    if(me.abilityReady) ctrls+=`<button class="sec" onclick="useAbility()">능력 · ${esc(me.champ)}</button>`;
+    if(me.isSpy){
+      ctrls+=`<button class="sec" onclick="startBribe('offer')">매수 제안</button>`;
+      ctrls+=`<button class="sec" onclick="startBribe('force')" ${me.forceUsed?'disabled':''}>강제 매수</button>`;
+    }
+  }
+  const champLine = me?`<div class="muted" style="font-size:12px;margin-top:7px">챔피언 <b style="color:var(--gold2)">${esc(me.champ)}</b> — ${esc(me.champDesc)}</div>`:'';
+  let bribeBox='';
+  if(me && me.bribeOffer){
+    bribeBox=`<div class="panel" style="margin:11px 0 0;border-color:var(--red)">
+      <b style="color:var(--red)">⛓ 은밀한 제안이 도착했다</b>
+      <div class="muted" style="font-size:12px;margin:5px 0 9px">누군가 당신을 스파이로 끌어들이려 합니다. 수락하면 스파이 승리 조건으로 전환됩니다.</div>
+      <div class="row"><button onclick="respondBribe(true)">수락</button><button class="sec" onclick="respondBribe(false)">거절</button></div></div>`;
+  }
   $('#topbar').innerHTML = `<div class="row" style="justify-content:space-between">
     <div>내 역할 ${crest}</div>
-    <div class="turnpill">${yourTurn?'⚔️ 당신의 차례':'⏳ '+esc(d.turnName)+' 차례'}</div></div>`;
+    <div class="turnpill">${yourTurn?'⚔️ 당신의 차례':'⏳ '+esc(d.turnName)+' 차례'}</div></div>
+    ${champLine}${ctrls?`<div class="row" style="margin-top:9px">${ctrls}</div>`:''}${bribeBox}`;
 
   renderBoard(d);
   $('#legend').innerHTML = `
@@ -381,9 +429,9 @@ function renderGame(d){
   }
 
   $('#players').innerHTML = d.players.map((p,i)=>{
-    const isTgt = canTargetPlayer() && p.id!==MYID;
+    const isTgt = (canTargetPlayer() || mode==='bribe_offer' || mode==='bribe_force') && p.id!==MYID;
     return `<div class="pl ${i===d.turn?'turn':''} ${p.id===MYID?'me':''} ${isTgt?'clickable':''}" data-i="${i}">
-      <span>${esc(p.name)}${p.id===MYID?' <span class="muted">(나)</span>':''} ${p.connected?'':'<span class="badge">이탈</span>'}</span>
+      <span>${esc(p.name)}${p.id===MYID?' <span class="muted">(나)</span>':''} ${p.converted?'<span class="badge stun">전향</span>':''} ${p.connected?'':'<span class="badge">이탈</span>'}</span>
       <span>${p.blocked?'<span class="badge stun">스턴</span> ':''}<span class="badge">손 ${p.hand}</span></span></div>`;
   }).join('');
   $('#log').innerHTML = d.log.map(l=>`<div>· ${esc(l)}</div>`).reverse().join('');
@@ -397,7 +445,7 @@ function renderBoard(d){
   let html='';
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     const key=r+','+c, t=d.board[key]; let cls='cell', inner='', extra='';
-    const canGank=selIsAction('gank'), canWard=selIsAction('ward');
+    const canGank=selIsAction('gank')||mode==='ab_pos', canWard=selIsAction('ward')||mode==='ab_nexus';
     if(!t){ cls+=' empty'; }
     else if(t.kind==='start'){ cls+=' start'; inner=startSVG(); }
     else if(t.kind==='nexus'){
@@ -444,12 +492,25 @@ function selCard(){ return (ST&&ST.me&&sel!==null)?ST.me.hand[sel]:null; }
 function selIsAction(a){ const c=selCard(); return c&&c.type==='action'&&c.action===a; }
 function canTargetPlayer(){ const c=selCard(); return c&&c.type==='action'&&(c.action==='stun'||c.action==='heal'); }
 
-function pickHand(i){ if(!ST||!ST.me||!ST.me.myTurn) return; sel=(sel===i?null:i); rot=0; renderGame(ST); }
+function pickHand(i){ if(!ST||!ST.me||!ST.me.myTurn) return; sel=(sel===i?null:i); rot=0; mode=null; renderGame(ST); }
 function rotate(){ if(sel===null) return; rot^=1; updateHint(); }
+
+function useAbility(){
+  const me=ST&&ST.me; if(!me||!me.myTurn||!me.abilityReady) return;
+  sel=null;
+  if(me.champTarget==='none'){ s.emit('ability',{payload:{}}); mode=null; }
+  else { mode = me.champTarget==='pos'?'ab_pos':(me.champTarget==='nexus'?'ab_nexus':'ab_player'); renderGame(ST); }
+}
+function startBribe(m){ const me=ST&&ST.me; if(!me||!me.myTurn||!me.isSpy) return; sel=null; mode='bribe_'+m; renderGame(ST); }
+function respondBribe(a){ s.emit('bribe_response',{accept:a}); }
 
 function updateHint(){
   const me=ST&&ST.me; const h=$('#hint'); if(!me){h.textContent='';return;}
   if(!me.myTurn){ h.textContent='다른 소환사의 차례입니다.'; return; }
+  if(mode==='ab_pos'){ h.textContent='능력 · 부술 길을 누르세요.'; return; }
+  if(mode==='ab_nexus'){ h.textContent='능력 · 공개할 넥서스(?)를 누르세요.'; return; }
+  if(mode==='bribe_offer'){ h.textContent='매수 제안할 소환사를 목록에서 누르세요.'; return; }
+  if(mode==='bribe_force'){ h.textContent='강제 매수(공개 전향)할 소환사를 누르세요.'; return; }
   const c=selCard();
   if(!c){ h.textContent='손패에서 카드를 고르세요.'; return; }
   if(c.type==='path') h.textContent = me.blocked?'스턴 상태 — 길을 놓을 수 없습니다. 정화가 필요합니다.'
@@ -461,8 +522,12 @@ function updateHint(){
 }
 
 function clickCell(r,c){
-  const me=ST&&ST.me; if(!me||!me.myTurn||sel===null) return;
-  const card=selCard(), t=ST.board[r+','+c];
+  const me=ST&&ST.me; if(!me||!me.myTurn) return;
+  const t=ST.board[r+','+c];
+  if(mode==='ab_pos'){ if(!t||t.kind!=='path') return; s.emit('ability',{payload:{pos:[r,c]}}); mode=null; return; }
+  if(mode==='ab_nexus'){ const ni=nexusIndex(ST,r,c); if(ni<0) return; s.emit('ability',{payload:{nexus:ni}}); mode=null; return; }
+  if(sel===null) return;
+  const card=selCard();
   if(card.type==='path'){ if(t) return; s.emit('act',{kind:'place',payload:{hand:sel,pos:[r,c],rot}}); sel=null; }
   else if(card.action==='gank'){ if(!t||t.kind!=='path') return; s.emit('act',{kind:'action',payload:{hand:sel,pos:[r,c]}}); sel=null; }
   else if(card.action==='ward'){ const ni=nexusIndex(ST,r,c); if(ni<0) return; s.emit('act',{kind:'action',payload:{hand:sel,nexus:ni}}); sel=null; }
@@ -470,9 +535,13 @@ function clickCell(r,c){
 
 document.addEventListener('click',e=>{
   const pl=e.target.closest('#players .pl'); if(!pl||!ST||!ST.me||!ST.me.myTurn) return;
-  const i=+pl.dataset.i; const card=selCard();
-  if(card&&card.type==='action'&&(card.action==='stun'||card.action==='heal')&&ST.players[i]&&ST.players[i].id!==MYID){
-    s.emit('act',{kind:'action',payload:{hand:sel,target:ST.players[i].id}}); sel=null;
+  const i=+pl.dataset.i; const tgt=ST.players[i]; if(!tgt||tgt.id===MYID) return;
+  if(mode==='bribe_offer'||mode==='bribe_force'){
+    s.emit('bribe',{payload:{mode:mode==='bribe_offer'?'offer':'force',target:tgt.id}}); mode=null; return;
+  }
+  const card=selCard();
+  if(card&&card.type==='action'&&(card.action==='stun'||card.action==='heal')){
+    s.emit('act',{kind:'action',payload:{hand:sel,target:tgt.id}}); sel=null;
   }
 });
 
