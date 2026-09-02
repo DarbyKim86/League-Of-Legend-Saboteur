@@ -73,14 +73,14 @@ class Game:
         for p, role, ch in zip(players, roles, champs):
             self.players.append({
                 "id": p["id"], "name": p["name"], "role": role, "champ": ch,
-                "hand": [], "blocked": False, "ward_seen": {}, "connected": True,
-                "champ_used": False, "double": False, "converted": False,
+                "hand": [], "blocked": False, "stun_left": 0, "ward_seen": {}, "connected": True,
+                "champ_used": False, "double": False, "converted": False, "dropped": False,
             })
         self.turn = 0
         self.phase = "진행"
         self.winner = None
         self.pending_bribe = None
-        self.force_used = False
+        self.bribe_used = False
         self.log = ["게임 시작! 각자 역할과 챔피언을 확인하세요."]
         for pl in self.players:
             self._draw(pl, HAND_SIZE)
@@ -206,11 +206,51 @@ class Game:
             self.winner = "스파이"
             self.log.append("덱 소진 — 스파이 승리! 넥서스를 지켜냈다.")
             return
-        self.turn = (self.turn + 1) % len(self.players)
+        n = len(self.players)
+        moved = False
+        for _ in range(n):
+            self.turn = (self.turn + 1) % n
+            if not self.players[self.turn]["dropped"]:
+                moved = True
+                break
+        if not moved:
+            self.phase = "종료"
+            self.winner = "스파이"
+            self.log.append("남은 플레이어가 없습니다.")
+            return
         nxt = self.players[self.turn]
-        if nxt["champ"] == "그웬" and nxt["blocked"]:
-            nxt["blocked"] = False
-            self.log.append(f"🌫 {nxt['name']}(그웬) 안개로 CC 자동 정화")
+        if nxt["blocked"]:
+            if nxt["champ"] == "그웬":
+                nxt["blocked"] = False
+                nxt["stun_left"] = 0
+                self.log.append(f"🌫 {nxt['name']}(그웬) 안개로 CC 자동 정화")
+            else:
+                nxt["stun_left"] -= 1
+                if nxt["stun_left"] <= 0:
+                    nxt["blocked"] = False
+                    nxt["stun_left"] = 0
+                    self.log.append(f"⏳ {nxt['name']} 스턴 해제")
+
+    def skip_absent(self):
+        """이탈이 확인된 플레이어를 게임에서 제외하고 진행."""
+        changed = False
+        for p in self.players:
+            if not p["connected"] and not p["dropped"]:
+                p["dropped"] = True
+                changed = True
+                self.log.append(f"🚪 {p['name']} 이탈 처리 — 게임에서 제외")
+        if changed and self.phase == "진행":
+            n = len(self.players)
+            if self.players[self.turn]["dropped"]:
+                for _ in range(n):
+                    self.turn = (self.turn + 1) % n
+                    if not self.players[self.turn]["dropped"]:
+                        break
+            if all(p["dropped"] for p in self.players):
+                self.phase = "종료"
+                self.winner = "스파이"
+                self.log.append("남은 플레이어가 없습니다.")
+        return changed
 
     def _find(self, pid):
         for p in self.players:
@@ -278,11 +318,15 @@ class Game:
                     if t["blocked"]:
                         return False, "이미 스턴 상태입니다."
                     t["blocked"] = True
-                    self.log.append(f"{pl['name']} → {t['name']} 스턴")
+                    t["stun_left"] = 3
+                    self.log.append(f"{pl['name']} → {t['name']} 스턴 (3턴 뒤 해제)")
                 else:
+                    if t["id"] == pid:
+                        return False, "자신은 정화할 수 없습니다."
                     if not t["blocked"]:
                         return False, "정화할 CC가 없습니다."
                     t["blocked"] = False
+                    t["stun_left"] = 0
                     self.log.append(f"{pl['name']} → {t['name']} 정화")
             elif a == "gank":
                 pos = tuple(payload["pos"])
@@ -357,21 +401,24 @@ class Game:
             return False, "당신의 턴이 아닙니다.", None
         if pl["role"] != "스파이":
             return False, "스파이만 매수할 수 있습니다.", None
+        if self.bribe_used:
+            return False, "매수는 게임당 1회만 가능합니다.", None
         mode = payload.get("mode")
         t = self._find(payload.get("target"))
         if not t or t["role"] == "스파이":
             return False, "매수할 소환사를 지정하세요.", None
 
         if mode == "force":
-            if self.force_used:
-                return False, "강제 매수는 게임당 1회뿐입니다.", None
-            self.force_used = True
+            if not t["blocked"]:
+                return False, "강제 매수는 대상이 스턴 상태일 때만 가능합니다.", None
+            self.bribe_used = True
             t["role"] = "스파이"
             t["converted"] = True
             self.log.append(f"⛓ {t['name']}가 세뇌되어 전향했다! (정체 노출)")
             self._advance()
             return True, "", None
         if mode == "offer":
+            self.bribe_used = True
             self.pending_bribe = {"to": t["id"], "from": pl["name"]}
             self.log.append(f"{pl['name']}가 은밀히 누군가에게 제안을 보냈다…")
             self._advance()
@@ -415,7 +462,7 @@ class Game:
             "turnName": self.players[self.turn]["name"] if self.players else "",
             "board": self.public_board(),
             "players": [{"id": p["id"], "name": p["name"], "blocked": p["blocked"],
-                         "hand": len(p["hand"]), "connected": p["connected"],
+                         "hand": len(p["hand"]), "connected": p["connected"], "dropped": p["dropped"],
                          "converted": p["converted"], "champ": p["champ"]} for p in self.players],
             "log": self.log[-14:],
             "me": None if not me else {
@@ -423,7 +470,10 @@ class Game:
                 "hand": me["hand"], "wardSeen": me["ward_seen"], "myTurn": my_turn,
                 "champ": champ, "champKind": info.get("kind"), "champDesc": info.get("desc", ""),
                 "champTarget": info.get("target"), "abilityReady": (info.get("kind") == "active" and not me["champ_used"]),
-                "isSpy": me["role"] == "스파이", "forceUsed": self.force_used, "goal": goal,
+                "isSpy": me["role"] == "스파이", "goal": goal,
+                "canBribe": (me["role"] == "스파이" and not self.bribe_used),
+                "canForce": (me["role"] == "스파이" and not self.bribe_used and
+                             any(p["role"] == "소환사" and p["blocked"] and p["id"] != pid for p in self.players)),
                 "bribeOffer": (self.pending_bribe["from"] if self.pending_bribe and self.pending_bribe["to"] == pid else None),
             },
             "meta": {"rows": ROWS, "cols": NEXUS_COL + 1, "start": list(START),

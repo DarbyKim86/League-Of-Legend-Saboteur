@@ -135,6 +135,15 @@ def on_bribe_response(data):
     push(code)
 
 
+@socketio.on("skip_absent")
+def on_skip_absent(data):
+    code, r, p = room_of(request.sid)
+    if not r or not r["game"]:
+        return
+    r["game"].skip_absent()
+    push(code)
+
+
 @socketio.on("disconnect")
 def on_disc():
     code, r, p = room_of(request.sid)
@@ -250,6 +259,7 @@ PAGE = r"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
   .pl.turn{border-color:var(--gold);background:var(--panel2);box-shadow:inset 3px 0 0 var(--gold)}
   .pl.me{outline:1px solid rgba(60,137,201,.35)}
   .pl.clickable{cursor:pointer} .pl.clickable:hover{border-color:var(--teal)}
+  .pl.dropped{opacity:.4;filter:grayscale(.6)}
   .badge{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
   .badge.stun{color:var(--red);border-color:rgba(198,68,62,.6)}
   .badge.gold{color:var(--gold2);border-color:var(--gold)}
@@ -416,9 +426,9 @@ function renderGame(d){
   let ctrls='';
   if(me && yourTurn){
     if(me.abilityReady) ctrls+=`<button class="sec" onclick="useAbility()">능력 · ${esc(me.champ)}</button>`;
-    if(me.isSpy){
+    if(me.isSpy && me.canBribe){
       ctrls+=`<button class="sec" onclick="startBribe('offer')">매수 제안</button>`;
-      ctrls+=`<button class="sec" onclick="startBribe('force')" ${me.forceUsed?'disabled':''}>강제 매수</button>`;
+      ctrls+=`<button class="sec" onclick="startBribe('force')" ${me.canForce?'':'disabled'} title="대상이 스턴 상태일 때만 가능">강제 매수</button>`;
     }
   }
   const champLine = me?`<div class="muted" style="font-size:12px;margin-top:7px;cursor:pointer" onclick="if(ST&&ST.me)showReveal(ST.me)" title="다시 보기">챔피언 <b style="color:var(--gold2)">${esc(me.champ)}</b> — ${esc(me.champDesc)}<br>목표 · ${esc(me.goal)} <span style="color:var(--teal)">ⓘ</span></div>`:'';
@@ -453,10 +463,12 @@ function renderGame(d){
     updateHint();
   }
 
-  $('#players').innerHTML = d.players.map((p,i)=>{
-    const isTgt = (canTargetPlayer() || mode==='bribe_offer' || mode==='bribe_force') && p.id!==MYID;
-    return `<div class="pl ${i===d.turn?'turn':''} ${p.id===MYID?'me':''} ${isTgt?'clickable':''}" data-i="${i}">
-      <span>${esc(p.name)}${p.id===MYID?' <span class="muted">(나)</span>':''} ${p.converted?'<span class="badge stun">전향</span>':''} ${p.connected?'':'<span class="badge">이탈</span>'}</span>
+  const absent = d.players.some(p=>!p.connected && !p.dropped);
+  const skipBtn = absent ? `<button class="sec" style="width:100%;margin-bottom:9px" onclick="s.emit('skip_absent',{})">이탈자 제외하고 계속</button>` : '';
+  $('#players').innerHTML = skipBtn + d.players.map((p,i)=>{
+    const isTgt = (canTargetPlayer() || mode==='bribe_offer' || mode==='bribe_force') && p.id!==MYID && !p.dropped;
+    return `<div class="pl ${i===d.turn?'turn':''} ${p.id===MYID?'me':''} ${isTgt?'clickable':''} ${p.dropped?'dropped':''}" data-i="${i}">
+      <span>${esc(p.name)}${p.id===MYID?' <span class="muted">(나)</span>':''} ${p.converted?'<span class="badge stun">전향</span>':''} ${p.dropped?'<span class="badge">제외</span>':(p.connected?'':'<span class="badge">이탈</span>')}</span>
       <span>${p.blocked?'<span class="badge stun">스턴</span> ':''}<span class="badge">손 ${p.hand}</span></span></div>`;
   }).join('');
   $('#log').innerHTML = d.log.map(l=>`<div>· ${esc(l)}</div>`).reverse().join('');
